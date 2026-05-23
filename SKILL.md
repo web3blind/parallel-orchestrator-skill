@@ -1,6 +1,6 @@
 ---
 name: parallel-orchestrator
-description: "Use when a task contains multiple independent read-only subtasks that can be safely delegated in parallel; decompose, fan out with delegate_task batch mode, then synthesize a verified result."
+description: "Use when a task contains multiple independent read-only subtasks that can be safely delegated in parallel; decompose, fan out with delegate_task batch mode, then synthesize and verify key evidence."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -13,7 +13,6 @@ aliases:
   - параллельно
   - распараллель
   - распараллелить
-  - быстрее
 metadata:
   hermes:
     tags: [Delegation, Parallel, Orchestration, Research, Review, Fan-Out]
@@ -93,6 +92,15 @@ Never auto-parallelize external side effects:
 - Purchases, payments, account changes, API key creation, credential rotation.
 
 If side effects are required, ask for explicit scope and run the actions sequentially unless the user has approved a safe isolated plan.
+
+## Delegate Task Limitations
+
+`delegate_task` is fast, but it is not durable infrastructure.
+
+- Do not use this pattern for durable or long-running work that must survive interruption. `delegate_task` is synchronous and child work is cancelled if the parent turn is interrupted. Use cron jobs or background terminal processes for durable monitoring or long batch jobs.
+- Children cannot clarify with the user. If a child would need a decision from the user, keep that decision in the parent before delegation or do not delegate that slice.
+- Subagent results are leads, not verified facts. For high-impact claims, the parent must verify at least the key evidence directly: source URL, file path/line, command output, PR status, or API response. Do not report “verified” unless the parent checked it or the child returned concrete evidence that can be inspected.
+- Subagents are isolated from the parent context. Put all required assumptions, constraints, paths, source preferences, output schema, and forbidden actions into each child prompt.
 
 ## Decomposition Rules
 
@@ -300,6 +308,22 @@ Use minimal child toolsets:
 
 Avoid giving children broad toolsets by default. Fewer tools reduce cost, risk, and context noise.
 
+When giving children `terminal`, constrain commands to read-only inspection: `git diff`, `git show`, `git status`, `python -m pytest --collect-only`, static reads, and equivalent non-mutating diagnostics. Do not let children install packages, run formatters, update lockfiles, write reports, run migrations, start services that mutate state, or execute commands that modify the workspace.
+
+## Output Contract
+
+The parent response must be one synthesized answer, not a concatenation of child reports.
+
+Include:
+
+- The final answer or recommendation.
+- Which slices were delegated and which completed.
+- Key evidence that supports high-impact claims.
+- Contradictions, uncertainty, and missing slices.
+- Any follow-up action that should remain sequential or require explicit approval.
+
+Do not claim a result is verified only because a child said so. Say “child-reported” or “needs parent verification” when evidence was not directly checked by the parent.
+
 ## Examples
 
 ### Multi-Blockchain Governance Analysis
@@ -399,6 +423,28 @@ Before final response:
 - [ ] Coverage of the original request was checked.
 - [ ] Contradictions and uncertainty were labeled.
 - [ ] Final answer includes practical next steps when useful.
+
+## Quick Test Checklist
+
+Use this quick check before applying the skill to a real request:
+
+- [ ] Can the request be split into at least two independent slices?
+- [ ] Is the first wave read-only?
+- [ ] Does each child have a self-contained prompt and output schema?
+- [ ] Are child toolsets minimal?
+- [ ] Are `terminal` commands constrained to non-mutating inspection when used?
+- [ ] Is there a parent synthesis and evidence-verification step?
+- [ ] Would a parent interruption be acceptable? If not, use cron/background processes instead.
+
+## Done Criteria
+
+The skill run is complete only when:
+
+- All delegated slices have either completed or are explicitly marked missing/failed.
+- The parent synthesized the results into one coherent answer.
+- High-impact claims have inspectable evidence or are labeled as unverified child reports.
+- No child performed external side effects or shared-state writes.
+- The final answer addresses the original user request and states any remaining uncertainty.
 
 ## Quick Invocation Examples
 
