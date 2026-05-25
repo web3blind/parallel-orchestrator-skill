@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.1.1
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -31,7 +31,7 @@ The practical pipeline:
 
 1. Classify whether parallelization is safe.
 2. Decompose independent research/analytics/audit slices.
-3. Prepare self-contained worker prompts and optional notes/output paths directly in the parent turn.
+3. For large jobs, provision a durable workspace with `scripts/orchestration.py`: resources, assigned files, worker prompts, output placeholders, synthesis prompt, and verification checklist.
 4. Run workers via `delegate_task(tasks=[...])` batch mode or separate durable Hermes processes when needed.
 5. Save or inspect raw worker outputs when the task is large enough to need artifacts.
 6. Synthesize child results into one final answer/document.
@@ -39,7 +39,7 @@ The practical pipeline:
 
 The goal is lower wall-clock time and better coverage for research-like work, not uncontrolled agent swarms. Parallelism is useful when each child can work without mutating the same files, touching shared state, or performing external side effects.
 
-Hermes already supports parallel subagents through `delegate_task` batch mode. This skill teaches when to use that capability and adds a repeatable workflow around it without requiring a separate bundled planning script.
+Hermes already supports parallel subagents through `delegate_task` batch mode. This skill teaches when to use that capability and includes a general-purpose `scripts/orchestration.py` helper for provisioning resources, files, worker prompts, output placeholders, synthesis, and verification artifacts.
 
 ## When to Use
 
@@ -125,7 +125,7 @@ This skill can improve Hermes behavior on research/analytics/audit/document task
 - More systematic raw outputs.
 - Explicit synthesis/reducer pass.
 - Evidence and coverage verification.
-- Durable prompt/notes artifacts when the parent explicitly needs them.
+- Script-provisioned resources, file assignments, worker prompts, output placeholders, synthesis prompts, and verification checklists when the parent explicitly needs artifacts.
 
 It does **not** turn Hermes into a full async distributed scheduler. It does not add core-level persistent worker state, cancellation, retries, streaming progress, dependency management, or automatic merge conflict handling. If the task needs those guarantees, use background processes, cron, external orchestration, or core changes.
 
@@ -208,27 +208,58 @@ A child prompt should include:
 
 Do not tell every child to solve the full task. Give each child a bounded slice.
 
-### Step 3 — Prepare Worker Prompts and Optional Artifacts
+### Step 3 — Provision Worker Prompts, Resources, and Optional Artifacts
 
 For small tasks, build the `delegate_task(tasks=[...])` payload directly in the parent turn.
 
-For large research/audit/report tasks, prepare a simple durable folder manually if it helps preserve coverage:
+For larger research/audit/report tasks, use the bundled general helper instead of ad-hoc prompt writing:
+
+```bash
+python scripts/orchestration.py \
+  --project "EA monetization research" \
+  --task-type research \
+  --targets "EA Sports FC|Apex Legends|The Sims 4|Madden NFL|Need for Speed" \
+  --resource "brief=note:focus on monetization loops and accessibility of evidence" \
+  --out ./parallel-orchestration/ea-monetization
+```
+
+For local-file audits, assign files/resources explicitly:
+
+```bash
+python scripts/orchestration.py \
+  --project "Architecture read-only review" \
+  --task-type audit \
+  --files "src/**/*.py" \
+  --files "tests/**/*.py" \
+  --max-workers 3 \
+  --toolsets terminal,file \
+  --out ./parallel-orchestration/architecture-review
+```
+
+It creates:
 
 ```text
 parallel-orchestration/<project>/
-├── plan.md              # split axis, scope, risks, rubric
+├── manifest.json        # packages, resources, policy, schema
+├── resources.json       # file/resource inventory with hashes where possible
 ├── worker_prompts/      # one self-contained prompt per worker
-├── workers/             # raw child outputs copied here if needed
+├── workers/             # raw child output placeholders
+├── artifacts/           # parent-owned artifacts only
+├── logs/                # optional run notes
 ├── synthesis_prompt.md  # reducer instructions for the parent/final writer
-└── verification.md      # coverage/evidence checklist
+├── verification.md      # coverage/evidence checklist
+└── README.md
 ```
 
-No bundled script is required. The important part is the contract, not the file generator:
+The helper does not call LLMs and does not change Hermes core. It provisions the orchestration workspace so the parent can dispatch workers consistently. Default policy is read-only; the script writes only under `--out` unless `--copy-files` is explicitly used to snapshot inputs into the workspace.
 
-- every worker prompt is self-contained;
-- every worker has a bounded read-only slice;
-- raw outputs can be saved if the task is too large to synthesize from memory;
-- synthesis and verification stay in the parent.
+Use this helper when the task needs any of these:
+
+- several targets or files that must be distributed across workers;
+- durable prompts/output placeholders;
+- resource inventory;
+- repeatable synthesis and verification gates;
+- evidence tracking for a long report.
 
 ### Step 4 — Call `delegate_task` in Batch Mode
 
