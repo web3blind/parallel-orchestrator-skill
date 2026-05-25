@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.2.0
+version: 1.2.1
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -39,7 +39,7 @@ The practical pipeline:
 
 The goal is lower wall-clock time and better coverage for research-like work, not uncontrolled agent swarms. Parallelism is useful when each child can work without mutating the same files, touching shared state, or performing external side effects.
 
-Hermes already supports parallel subagents through `delegate_task` batch mode. This skill teaches when to use that capability and includes a general-purpose `scripts/orchestration.py` helper for provisioning resources, files, worker prompts, output placeholders, synthesis, and verification artifacts.
+Hermes already supports parallel subagents through `delegate_task` batch mode. This skill teaches when to use that capability and includes a general-purpose `scripts/orchestration.py` helper for provisioning resources, files, worker prompts, output placeholders, synthesis, and verification artifacts. For experiments that need several full Hermes/AIAgent processes instead of one centralized parent call, use `scripts/orchestration_runner.py --mode process`; treat it as a test harness, not a core scheduler.
 
 ## When to Use
 
@@ -260,6 +260,27 @@ Use this helper when the task needs any of these:
 - resource inventory;
 - repeatable synthesis and verification gates;
 - evidence tracking for a long report.
+
+### Optional Experiment — Spawn Full Hermes Processes
+
+When you specifically want to compare the normal centralized flow with independent full Hermes/AIAgent worker processes, use the experimental runner:
+
+```bash
+python scripts/orchestration_runner.py \
+  --mode process \
+  --project "VPN protocols and clients comparison" \
+  --task-type research \
+  --targets "Protocols|Clients|GitHub trends" \
+  --toolsets web \
+  --out ./parallel-orchestration/vpn-process-test
+```
+
+Modes:
+
+- `smart` provisions the workspace and asks one parent `hermes chat` session to use this skill plus `delegate_task` batch mode.
+- `process` launches one separate `hermes chat` process per worker prompt, writes outputs to `workers/*.md`, then runs a separate synthesis process.
+
+This is intentionally a test harness. It can show whether process-level fan-out helps a given workload, but it does not add Hermes core features such as live progress, durable worker registry, child-to-child collaboration, cancellation UI, or automatic retries. Do not add a permanent `compare` mode unless it becomes operationally useful; manual comparison from `run_report.json` is enough for now.
 
 ### Step 4 — Call `delegate_task` in Batch Mode
 

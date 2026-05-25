@@ -48,15 +48,28 @@ curl -fsSL https://raw.githubusercontent.com/web3blind/parallel-orchestrator-ski
 chmod +x ~/.hermes/skills/parallel-orchestrator/scripts/orchestration.py
 ```
 
-## Helper script
+## Helper scripts
 
-The bundled helper is:
+The bundled provisioning helper is:
 
 ```text
 scripts/orchestration.py
 ```
 
 It provisions a local orchestration workspace. It does not call LLMs and does not modify Hermes core.
+
+The experimental runner is:
+
+```text
+scripts/orchestration_runner.py
+```
+
+It provisions the same workspace and then runs one of two modes:
+
+- `smart` — current centralized Hermes flow: one parent `hermes chat` session uses the `parallel-orchestrator` skill and `delegate_task` batch mode, then synthesizes.
+- `process` — experimental process-level fan-out: one independent `hermes chat` process per worker prompt runs concurrently, outputs are saved to `workers/*.md`, then a separate synthesis process creates `final_synthesis.md`.
+
+The runner is still a test harness, not a Hermes core scheduler. It does not add live progress, durable workers, child-to-child communication, or UI-level cancellation. A separate `compare` mode is intentionally omitted; compare runs are better done manually from `run_report.json` files when needed.
 
 Generated workspace:
 
@@ -147,4 +160,5 @@ Do not auto-parallelize:
 
 - `SKILL.md` — Hermes skill instructions.
 - `scripts/orchestration.py` — general workspace provisioner for resources, files, worker prompts, outputs, synthesis, and verification.
+- `scripts/orchestration_runner.py` — experimental runner with `smart` and `process` modes for testing centralized vs process-level fan-out.
 - `LICENSE` — MIT.
