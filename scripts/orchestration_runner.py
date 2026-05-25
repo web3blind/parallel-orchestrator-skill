@@ -202,7 +202,9 @@ def worker_command(args: argparse.Namespace, prompt_path: Path) -> list[str]:
     query = (
         prompt
         + "\n\nRun this worker task now. Use only the allowed/read-only tools. "
-        + "Return a concise but evidence-grounded result in the requested schema."
+        + "Stay inside your assigned slice; do not solve the other workers' scopes. "
+        + "For every substantive claim, include evidence (URL, file path/line, command output, dataset row) or label it as hypothesis/low-confidence. "
+        + "Return a concise but evidence-grounded result in the requested schema, including risks, conflicts, and gaps."
     )
     cmd = hermes_base_command(args)
     if args.toolsets:
@@ -238,7 +240,7 @@ Worker outputs are embedded below. Do not try to read a relative `workers/` dire
 Worker outputs:
 {chr(10).join(worker_outputs)}
 
-Produce the final answer in Russian. Be explicit about missing/failed/timeouted workers and do not claim verification beyond the supplied evidence.
+Produce the final answer in Russian. Apply the merge protocol: map findings to the rubric, deduplicate overlaps, compare evidence quality, label contradictions as `conflict`, name missing/failed/timeouted workers, and do not claim verification beyond the supplied evidence.
 """
     cmd = hermes_base_command(args)
     cmd.extend(["--toolsets", "file"])
@@ -255,7 +257,7 @@ def smart_command(args: argparse.Namespace, out: Path, manifest: dict[str, Any])
 Project: {manifest['project']}
 Workspace: {out}
 
-Dispatch these worker prompts via delegate_task batch mode when safe, then synthesize one final Russian answer. If a worker fails, label the gap and continue with available evidence.
+Dispatch these worker prompts via delegate_task batch mode when safe, then synthesize one final Russian answer. Before dispatch, apply the decomposition contract: name independent slices, dependencies, non-parallelizable parts, and why workers are distinct. If a worker fails, returns empty output, or drifts, retry only that slice once if practical; otherwise label the gap and continue with available evidence. In the final merge, deduplicate overlaps, compare evidence quality, label contradictions as `conflict`, and exclude unsupported claims or mark them low-confidence.
 
 Worker prompts:
 {chr(10).join(prompts)}

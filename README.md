@@ -7,15 +7,18 @@ Use it when a request naturally splits into independent **read-only** subtasks: 
 The skill teaches Hermes to:
 
 - classify whether parallel execution is safe;
+- enforce a decomposition contract: independent branches, dependencies, non-parallelizable parts, and distinct worker scopes;
 - split work by independent objects/sources/modules/options;
 - provision resources, local file assignments, worker prompts, output placeholders, synthesis prompts, and verification checklists with `scripts/orchestration.py` when a job is large enough;
 - use `delegate_task(tasks=[...])` batch mode;
 - keep child toolsets minimal and read-only;
-- synthesize child results into one final answer/document;
+- require worker evidence: claim → source/file/command → confidence → risk;
+- synthesize child results into one conflict-aware final answer/document;
 - verify high-impact evidence before claiming it is verified;
-- avoid automatic parallelization for shared writes or external side effects.
+- handle worker failure with targeted retry or graceful degradation;
+- avoid automatic parallelization for shared writes, sensitive data, or external side effects.
 
-It is a practical workaround for research/audit/document tasks without rewriting Hermes core. It does **not** replace a full async runtime scheduler with persistent worker state, retries, cancellation, and streaming progress.
+It is a practical quality orchestrator for research/audit/document tasks without rewriting Hermes core. It teaches Hermes to delegate without mush; it does **not** replace a full async runtime scheduler with persistent worker state, retries, cancellation, and streaming progress.
 
 ## Install
 

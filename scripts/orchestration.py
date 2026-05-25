@@ -32,20 +32,26 @@ from typing import Iterable
 
 DEFAULT_RESEARCH_SCHEMA = """Object(s):
 Summary:
-Key facts / findings:
-Evidence / sources:
-Risks or caveats:
-Confidence: high / medium / low
-Open questions:
+Key findings:
+- Claim / finding:
+  Evidence / sources:
+  Confidence: high / medium / low
+  Risk / caveat:
+Contradictions or conflicts noticed:
+Open questions / gaps:
 """.strip()
 
 DEFAULT_AUDIT_SCHEMA = """Scope reviewed:
 Critical issues:
+- Claim / finding:
+  Evidence with paths/lines or command output:
+  Confidence: high / medium / low
+  Risk / caveat:
 Important issues:
 Minor issues:
-Evidence with paths/lines:
 Suggested fixes:
-Confidence:
+Contradictions or conflicts noticed:
+Open questions / gaps:
 """.strip()
 
 DEFAULT_TRIAGE_SCHEMA = """Item:
@@ -53,7 +59,9 @@ State:
 Evidence:
 Likely action:
 Risks:
-Confidence:
+Confidence: high / medium / low
+Contradictions or conflicts noticed:
+Open questions / gaps:
 """.strip()
 
 
@@ -196,11 +204,15 @@ Rubric:
 {rubric}
 
 Rules:
-- Work only on the assigned slice.
+- Work only on the assigned slice; do not solve every worker's full task.
 - Treat this as read-only unless the parent explicitly says otherwise.
 - Do not commit, push, deploy, trade, send messages, submit forms, or mutate external systems.
 - Do not edit shared files or a shared final document.
-- Return concrete evidence: URLs, file paths/lines, command output, or explicit uncertainty.
+- Do not expose or request secrets, private keys, tokens, cookies, .env contents, unrelated private chat history, or production credentials.
+- Return concrete evidence for every substantive claim: URLs, file paths/lines, command output, dataset rows, or explicit uncertainty.
+- If you lack evidence for a claim, label it as hypothesis/low-confidence instead of fact.
+- Identify contradictions or conflicts with known sources if you see any.
+- If the assignment is impossible, empty, or off-scope, say so directly and explain the missing input.
 - Child output is a lead, not final verification; the parent will synthesize and verify.
 
 Return exactly this schema:
@@ -318,11 +330,19 @@ Use the worker outputs in `workers/` to produce one integrated answer.
 
 Required synthesis:
 - answer the original request directly;
-- compare findings across workers;
-- resolve or label contradictions;
+- map every worker result back to the original question/rubric;
+- deduplicate overlapping findings instead of pasting repeated sections;
+- compare evidence quality across workers;
+- resolve or label contradictions as `conflict`;
+- exclude unsupported claims or label them hypothesis/low-confidence;
 - cite strongest evidence;
-- list gaps and uncertainty;
+- list gaps, missing workers, failures, and uncertainty;
 - recommend next sequential actions if any.
+
+Failure handling:
+- If a worker failed, timed out, returned empty output, or drifted off-scope, mark that slice as missing/weak.
+- Retry only the failed slice if time/budget allows; otherwise degrade gracefully.
+- Never hide a failed branch when it affects coverage.
 
 Do not paste child reports raw. Do not claim verification unless evidence was checked.
 """
@@ -330,12 +350,31 @@ Do not paste child reports raw. Do not claim verification unless evidence was ch
 
     verification = """# Verification checklist
 
-- [ ] Every requested target/file/resource is covered or explicitly marked missing.
-- [ ] Every worker stayed within its assigned slice.
+## Decomposition contract
+
+- [ ] The split axis is explicit: object/source/module/option/persona.
+- [ ] Every worker has a distinct bounded slice.
+- [ ] Dependencies and non-parallelizable parts were kept in the parent/sequential path.
+- [ ] No worker was asked to solve the same full task unless this is an explicit red-team/steelman shape.
+
+## Evidence contract
+
+- [ ] Every substantive finding has evidence: URL, file path/line, command output, dataset row, or explicit uncertainty.
+- [ ] Unsupported claims are excluded or labeled hypothesis/low-confidence.
+- [ ] Source/evidence quality was considered before synthesis.
+
+## Safety / privacy
+
+- [ ] No secrets, private keys, tokens, cookies, .env contents, unrelated private chats, customer data, or production credentials were sent to workers.
 - [ ] No external side effects were requested or performed.
 - [ ] No shared final document or shared source file was edited by workers.
-- [ ] High-impact claims have URLs, file paths/lines, command output, or explicit uncertainty.
-- [ ] Contradictions are resolved or labeled.
+
+## Merge / failure handling
+
+- [ ] Every requested target/file/resource is covered or explicitly marked missing.
+- [ ] Every worker stayed within its assigned slice.
+- [ ] Contradictions are resolved or labeled as `conflict`.
+- [ ] Failed, timed-out, empty, or off-scope workers are named; retry/degrade decision is stated.
 - [ ] Final answer is synthesized, not a concatenation.
 """
     (out / "verification.md").write_text(verification, encoding="utf-8")

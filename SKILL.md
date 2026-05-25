@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.2.2
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -40,6 +40,8 @@ The practical pipeline:
 The goal is lower wall-clock time and better coverage for research-like work, not uncontrolled agent swarms. Parallelism is useful when each child can work without mutating the same files, touching shared state, or performing external side effects.
 
 Hermes already supports parallel subagents through `delegate_task` batch mode. This skill teaches when to use that capability and includes a general-purpose `scripts/orchestration.py` helper for provisioning resources, files, worker prompts, output placeholders, synthesis, and verification artifacts. For experiments that need several full Hermes/AIAgent processes instead of one centralized parent call, use `scripts/orchestration_runner.py --mode process`; treat it as a test harness, not a core scheduler.
+
+The primary value of this skill is **delegating without mush**: clear decomposition, evidence discipline, conflict-aware merge, failure handling, privacy boundaries, and explicit stop conditions. It is a quality orchestrator first and a parallel launcher second.
 
 ## When to Use
 
@@ -137,6 +139,88 @@ It does **not** turn Hermes into a full async distributed scheduler. It does not
 - Children cannot clarify with the user. If a child would need a user decision, keep that decision in the parent before delegation or do not delegate that slice.
 - Subagent results are leads, not verified facts. For high-impact claims, the parent must verify key evidence directly: source URL, file path/line, command output, PR status, or API response. Do not report “verified” unless the parent checked it or the child returned concrete evidence that can be inspected.
 - Subagents are isolated from the parent context. Put all required assumptions, constraints, paths, source preferences, output schema, and forbidden actions into each child prompt.
+
+## Quality Contracts
+
+These contracts are mandatory when using this skill. They prevent the common failure mode where several agents do overlapping work and the parent pastes a messy aggregate.
+
+### 1. Decomposition Contract
+
+Before launching workers, explicitly decide:
+
+- independent branches: which slices can run without waiting for each other;
+- dependencies: which questions must be answered sequentially or by the parent before fan-out;
+- non-parallelizable parts: shared state, shared files, one final document, credentials, production actions, or a single reasoning chain;
+- split axis: object/source/module/option/persona;
+- worker uniqueness: why each worker's scope is distinct.
+
+Anti-pattern: “3 agents answer the same full question in different words.” Use redundant agents only for an explicit red-team/steelman design, and label it as such.
+
+### 2. Evidence Contract
+
+Every worker must return findings in this shape:
+
+```text
+Claim / finding:
+Evidence: URL, file path + line, command output, dataset row, or explicit source note
+Confidence: high / medium / low
+Risk / caveat:
+```
+
+A finding without evidence must be treated as a hypothesis. Do not include unsupported claims in the final answer as facts; either exclude them or label them as unverified/low-confidence.
+
+### 3. Merge Protocol
+
+The parent/reducer must not merely summarize. It must:
+
+- map every worker result back to the original question and rubric;
+- deduplicate overlapping findings;
+- compare evidence quality across branches;
+- detect contradictions and label them as `conflict` instead of choosing the prettier answer;
+- state which branch, if any, failed or produced weak evidence;
+- produce one integrated answer with practical implications.
+
+### 4. Failure Modes
+
+If a worker times out, fails, returns empty output, or drifts off-scope:
+
+1. Retry only that slice once with a narrower prompt when time/budget allows.
+2. If retry is not available or fails again, degrade gracefully: synthesize from completed slices and explicitly mark the missing slice.
+3. Never hide a failed branch. The final answer must mention the missing/failed scope if it affects coverage.
+4. Do not rerun all workers when only one slice failed.
+
+### 5. Privacy / Blast Radius
+
+Before delegation, minimize what each worker receives. Do not send subagents:
+
+- secrets, API keys, private keys, wallet seeds, auth tokens, cookies, or `.env` contents;
+- private chat history unrelated to the assigned slice;
+- client/customer data unless explicitly required and approved;
+- production infrastructure credentials or privileged commands;
+- broader repository or file access than needed for the slice.
+
+If a task requires sensitive data, keep it in the parent and delegate only sanitized summaries or narrow read-only artifacts.
+
+### 6. Task Shapes
+
+Use these standard shapes before inventing a new one:
+
+1. **Research fan-out** — split by product/protocol/source cluster; workers return claims with sources; parent normalizes and recommends.
+2. **Codebase inspection** — split by module/subsystem; workers inspect read-only; parent ranks risks and avoids parallel edits.
+3. **PR review / triage** — split by PR/repo; workers report CI, scope, mergeability, risks, and evidence; parent prioritizes action.
+4. **Strategy red-team / steelman / synthesis** — one worker argues for, one against, one finds constraints/evidence; parent resolves trade-offs. This is the only normal shape where deliberate overlap is allowed.
+
+### 7. Stop Condition
+
+Do not parallelize when:
+
+- the task is small enough that delegation overhead dominates;
+- the answer needs one continuous chain of reasoning;
+- subtasks share mutable state or the same files;
+- workers would need to coordinate live decisions;
+- evidence cannot be scoped safely;
+- side effects are required;
+- user privacy would require copying broad sensitive context into children.
 
 ## Decomposition Rules
 
@@ -390,11 +474,13 @@ Ask each child to return:
 ```text
 Object(s):
 Summary:
-Key facts / findings:
-Evidence / sources:
-Risks or caveats:
-Confidence: high / medium / low
-Open questions:
+Key findings:
+- Claim / finding:
+  Evidence / sources:
+  Confidence: high / medium / low
+  Risk / caveat:
+Contradictions or conflicts noticed:
+Open questions / gaps:
 ```
 
 ### Code / Project Audit Child
@@ -404,11 +490,15 @@ Ask each child to return:
 ```text
 Scope reviewed:
 Critical issues:
+- Claim / finding:
+  Evidence with paths/lines or command output:
+  Confidence: high / medium / low
+  Risk / caveat:
 Important issues:
 Minor issues:
-Evidence with paths/lines:
 Suggested fixes:
-Confidence:
+Contradictions or conflicts noticed:
+Open questions / gaps:
 ```
 
 ### PR / Issue Triage Child
@@ -424,6 +514,9 @@ Changed-file scope:
 Likely action: merge-ready / fix CI / rebase / rebuild / close
 Evidence:
 Risks:
+Confidence: high / medium / low
+Contradictions or conflicts noticed:
+Open questions / gaps:
 ```
 
 ### Design Alternatives Child
@@ -462,9 +555,11 @@ The parent response must be one synthesized answer, not a concatenation of child
 Include:
 
 - The final answer or recommendation.
+- The decomposition contract summary: independent slices, dependencies/non-parallelized parts, and why workers were distinct.
 - Which slices were delegated and which completed.
 - Key evidence that supports high-impact claims.
-- Contradictions, uncertainty, and missing slices.
+- Contradictions labeled as `conflict`, uncertainty, and missing slices.
+- Any worker failures and whether they were retried or gracefully degraded.
 - Any follow-up action that should remain sequential or require explicit approval.
 
 Do not claim a result is verified only because a child said so. Say “child-reported” or “needs parent verification” when evidence was not directly checked by the parent.
@@ -547,14 +642,19 @@ Do not let children edit files unless the user explicitly asked for implementati
 Before final response:
 
 - [ ] The task was classified as safe for parallel read-only work, or explicit approval/isolation was used.
-- [ ] Each child had a distinct bounded scope.
-- [ ] Child prompts were self-contained.
+- [ ] Decomposition contract is satisfied: independent branches, dependencies, non-parallelizable parts, split axis, and worker uniqueness are clear.
+- [ ] Each child had a distinct bounded scope; no accidental duplicate full-task workers.
+- [ ] Child prompts were self-contained and privacy-minimized.
 - [ ] Child toolsets were minimal.
+- [ ] No child received secrets, unrelated private chat history, client data, production credentials, or broader file/repo access than needed.
 - [ ] No child was asked to perform external side effects.
 - [ ] No child edited shared files or a shared final document.
+- [ ] Every substantive child claim includes evidence or is labeled hypothesis/low-confidence.
 - [ ] Results were synthesized, not pasted.
+- [ ] Merge protocol was applied: deduplication, evidence comparison, conflict labels, missing/weak branch labels.
 - [ ] Coverage of the original request was checked.
 - [ ] Contradictions and uncertainty were labeled.
+- [ ] Failed/empty/off-scope workers were retried narrowly or explicitly degraded.
 - [ ] High-impact claims have inspectable evidence or are labeled as unverified child reports.
 - [ ] Final answer includes practical next steps when useful.
 
@@ -586,8 +686,11 @@ parallel compare governance across Ethereum, Solana, Cosmos, Polkadot, and Near
 
 The skill run is complete only when:
 
+- Parallelization was stopped or allowed based on an explicit stop-condition/decomposition check.
 - All delegated slices have either completed or are explicitly marked missing/failed.
+- Worker claims have evidence, or unsupported claims are excluded/labeled.
+- Conflicts between branches are labeled and handled instead of silently resolved.
 - The parent synthesized the results into one coherent answer.
 - High-impact claims have inspectable evidence or are labeled as unverified child reports.
-- No child performed external side effects or shared-state writes.
+- No child performed external side effects, saw unnecessary sensitive data, or wrote shared state.
 - The final answer addresses the original user request and states any remaining uncertainty.
