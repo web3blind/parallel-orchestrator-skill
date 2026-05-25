@@ -71,6 +71,12 @@ It provisions the same workspace and then runs one of two modes:
 
 The runner is still a test harness, not a Hermes core scheduler. It does not add live progress, durable workers, child-to-child communication, or UI-level cancellation. A separate `compare` mode is intentionally omitted; compare runs are better done manually from `run_report.json` files when needed.
 
+Mode selection policy:
+
+- Use `smart` / normal `delegate_task` by default for ordinary research and smaller comparisons.
+- Use `process` when the user explicitly wants full separate AIAgent processes, durable worker output files, stronger isolation, or avoiding a single `delegate_task` timeout.
+- Do not assume `process` is always faster: it can be more reliable for long workers, but has extra process and synthesis overhead.
+
 Generated workspace:
 
 ```text

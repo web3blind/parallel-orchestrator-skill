@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.2.1
+version: 1.2.2
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -279,6 +279,13 @@ Modes:
 
 - `smart` provisions the workspace and asks one parent `hermes chat` session to use this skill plus `delegate_task` batch mode.
 - `process` launches one separate `hermes chat` process per worker prompt, writes outputs to `workers/*.md`, then runs a separate synthesis process.
+
+Mode selection policy:
+
+- Default to normal in-agent `delegate_task` / `smart` behavior for ordinary research, small comparisons, and cases where the user wants one clean answer with minimal overhead.
+- Use `process` when the user explicitly asks for full separate AIAgent processes, stronger isolation, durable worker outputs, avoiding a single `delegate_task` timeout, or phrases such as "запусти отдельными процессами", "process mode", "не через одного босса", "чтобы довело до конца без таймаута", or "скопировать AIAgent".
+- If the user names a mode, obey it unless it conflicts with safety policy.
+- Do not assume `process` is always faster. It can complete more reliably because each worker is an independent `hermes chat` process and outputs are saved, but it has extra process and synthesis overhead.
 
 This is intentionally a test harness. It can show whether process-level fan-out helps a given workload, but it does not add Hermes core features such as live progress, durable worker registry, child-to-child collaboration, cancellation UI, or automatic retries. Do not add a permanent `compare` mode unless it becomes operationally useful; manual comparison from `run_report.json` is enough for now.
 
