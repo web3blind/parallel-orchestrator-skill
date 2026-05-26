@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.3.0
+version: 1.3.1
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -362,16 +362,25 @@ python scripts/orchestration_runner.py \
 Modes:
 
 - `smart` provisions the workspace and asks one parent `hermes chat` session to use this skill plus `delegate_task` batch mode.
-- `process` launches one separate `hermes chat` process per worker prompt, writes outputs to `workers/*.md`, then runs a separate synthesis process.
+- `process` launches one separate `hermes chat` process per worker prompt, writes outputs to `workers/*.md`, then runs a separate synthesis process by default.
+- `process --no-synthesis` launches the workers and writes raw outputs plus `run_report.json`, but skips the separate reducer. Use this when the current/main agent should inspect the worker files and do the final merge interactively in the active chat.
+
+Process output modes:
+
+- **Full report mode**: default `process`. Best for autonomous runs, benchmarks, scheduled work, large reports, or when the user wants `final_synthesis.md` saved in the workspace.
+- **Raw workers mode**: `process --no-synthesis`. Best for interactive work where the user wants independent worker outputs first, then the main agent/model performs the final synthesis directly in the current conversation.
 
 Mode selection policy:
 
 - Default to normal in-agent `delegate_task` / `smart` behavior for ordinary research, small comparisons, and cases where the user wants one clean answer with minimal overhead.
 - Use `process` when the user explicitly asks for full separate AIAgent processes, stronger isolation, durable worker outputs, avoiding a single `delegate_task` timeout, or phrases such as "запусти отдельными процессами", "process mode", "не через одного босса", "чтобы довело до конца без таймаута", or "скопировать AIAgent".
+- Add `--no-synthesis` when the user wants the workers only, wants the main/current chat model to do the final merge, or phrases such as "без отдельного синтеза", "пусть основной агент обработает", "только raw outputs", "без проверки/reducer", or "сначала собери outputs".
 - If the user names a mode, obey it unless it conflicts with safety policy.
 - Do not assume `process` is always faster. It can complete more reliably because each worker is an independent `hermes chat` process and outputs are saved, but it has extra process and synthesis overhead.
 
 This is intentionally a test harness. It can show whether process-level fan-out helps a given workload, but it does not add Hermes core features such as live progress, durable worker registry, child-to-child collaboration, cancellation UI, or automatic retries. Do not add a permanent `compare` mode unless it becomes operationally useful; manual comparison from `run_report.json` is enough for now.
+
+When using `process --no-synthesis`, the run is incomplete by design: the parent/current agent must read or summarize the worker outputs and apply the Merge Protocol before presenting a final answer. Do not treat raw worker files as the final user-facing report.
 
 ### Step 4 — Call `delegate_task` in Batch Mode
 

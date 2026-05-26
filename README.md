@@ -72,12 +72,18 @@ It provisions the same workspace and then runs one of two modes:
 - `smart` — current centralized Hermes flow: one parent `hermes chat` session uses the `parallel-orchestrator` skill and `delegate_task` batch mode, then synthesizes.
 - `process` — experimental process-level fan-out: one independent `hermes chat` process per worker prompt runs concurrently, outputs are saved to `workers/*.md`, then a separate synthesis process creates `final_synthesis.md`.
 
-The runner is still a test harness, not a Hermes core scheduler. It does not add live progress, durable workers, child-to-child communication, or UI-level cancellation. A separate `compare` mode is intentionally omitted; compare runs are better done manually from `run_report.json` files when needed.
+The runner is still a test harness, not a Hermes core scheduler. It does not add live progress, durable workers, child-to-child communication, or UI-level cancellation. A separate `compare` mode is intentionally not shipped; use two runs plus `run_report.json` when manual comparison is needed.
+
+`process` has two output styles:
+
+- **Full report mode**: default. Workers run first, then a separate synthesis process writes `final_synthesis.md`. Use this for autonomous reports, benchmarks, scheduled jobs, or when the user wants a saved final artifact.
+- **Raw workers mode**: add `--no-synthesis`. The runner stops after raw `workers/*.md` outputs and `run_report.json`; the current/main agent should then read the outputs and perform the final merge interactively in chat.
 
 Mode selection policy:
 
 - Use `smart` / normal `delegate_task` by default for ordinary research and smaller comparisons.
 - Use `process` when the user explicitly wants full separate AIAgent processes, durable worker output files, stronger isolation, or avoiding a single `delegate_task` timeout.
+- Add `--no-synthesis` when the user wants raw worker outputs only, or wants the current/main agent to do the final processing in the active chat instead of a separate reducer process.
 - Do not assume `process` is always faster: it can be more reliable for long workers, but has extra process and synthesis overhead.
 
 Generated workspace:
