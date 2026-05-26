@@ -81,7 +81,14 @@ The runner is still a test harness, not a Hermes core scheduler. It does not add
 
 Mode selection policy:
 
-- Use `smart` / normal `delegate_task` by default for ordinary research and smaller comparisons.
+If the user does not name a mode, choose automatically:
+
+1. Do not parallelize small, sequential, sensitive, or side-effectful tasks.
+2. Use `smart` / normal `delegate_task` for most broad read-only tasks that need one answer in the active chat.
+3. Use `process --no-synthesis` for long interactive research when durable worker outputs are useful but the main/current agent should do the final merge.
+4. Use full `process` for autonomous reports, benchmarks, scheduled/background work, or when a saved `final_synthesis.md` is desired.
+
+Additional rules:
 - Use `process` when the user explicitly wants full separate AIAgent processes, durable worker output files, stronger isolation, or avoiding a single `delegate_task` timeout.
 - Add `--no-synthesis` when the user wants raw worker outputs only, or wants the current/main agent to do the final processing in the active chat instead of a separate reducer process.
 - Do not assume `process` is always faster: it can be more reliable for long workers, but has extra process and synthesis overhead.

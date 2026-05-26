@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.3.1
+version: 1.3.2
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -372,6 +372,15 @@ Process output modes:
 
 Mode selection policy:
 
+If the user did not name a mode, choose automatically for best practical efficiency:
+
+1. **Do not parallelize** when the task is small, sequential, sensitive, or side-effectful.
+2. **Use normal `delegate_task` / `smart`** for most ordinary broad read-only tasks. This has the lowest overhead and usually the best latency/cost balance when a single final answer in the active chat is enough.
+3. **Use `process --no-synthesis`** for long interactive research when the user wants maximum fan-out but the current/main agent should do the final merge in chat. This avoids the extra separate reducer process while preserving durable worker files.
+4. **Use full `process`** for autonomous long runs, benchmarks, scheduled/background work, or when the user wants a saved `final_synthesis.md` report without relying on the current chat context.
+
+Additional rules:
+
 - Default to normal in-agent `delegate_task` / `smart` behavior for ordinary research, small comparisons, and cases where the user wants one clean answer with minimal overhead.
 - Use `process` when the user explicitly asks for full separate AIAgent processes, stronger isolation, durable worker outputs, avoiding a single `delegate_task` timeout, or phrases such as "запусти отдельными процессами", "process mode", "не через одного босса", "чтобы довело до конца без таймаута", or "скопировать AIAgent".
 - Add `--no-synthesis` when the user wants the workers only, wants the main/current chat model to do the final merge, or phrases such as "без отдельного синтеза", "пусть основной агент обработает", "только raw outputs", "без проверки/reducer", or "сначала собери outputs".
@@ -666,6 +675,17 @@ Before final response:
 - [ ] Failed/empty/off-scope workers were retried narrowly or explicitly degraded.
 - [ ] High-impact claims have inspectable evidence or are labeled as unverified child reports.
 - [ ] Final answer includes practical next steps when useful.
+
+## Zero-Config Behavior
+
+If the user simply gives a broad task and does not mention modes, choose the lowest-overhead safe route automatically:
+
+1. Do not parallelize small, sequential, sensitive, or side-effectful tasks.
+2. Use normal `delegate_task` / `smart` for most broad read-only tasks that need one answer in the active chat.
+3. Use `process --no-synthesis` for long interactive research when durable worker outputs are useful but the current/main agent should do the final merge.
+4. Use full `process` for autonomous reports, benchmarks, scheduled/background work, or when a saved `final_synthesis.md` is desired.
+
+Do not ask the user to choose `smart`, `process`, or `--no-synthesis` unless the choice changes side effects, cost, persistence, or expected output format. Apply this skill as an optimization layer, not as extra user-facing complexity.
 
 ## Quick Invocation Examples
 
