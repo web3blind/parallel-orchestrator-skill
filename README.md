@@ -81,11 +81,11 @@ The runner is still a test harness, not a Hermes core scheduler. It does not add
 
 Mode selection policy:
 
-If the user does not name a mode, choose automatically:
+If the user does not name a mode, choose automatically among safe parallel routes:
 
-1. Do not parallelize small, sequential, sensitive, or side-effectful tasks.
+1. If the task was misclassified and is not actually parallelizable, abort parallelization and continue with the appropriate non-parallel workflow. This is a safety gate, not a primary mode.
 2. Use `smart` / normal `delegate_task` for most broad read-only tasks that need one answer in the active chat.
-3. Use `process --no-synthesis` for long interactive research when durable worker outputs are useful but the main/current agent should do the final merge.
+3. Use `process --no-synthesis` for long interactive research with independent branches when durable worker outputs are useful but the main/current agent should do the final merge.
 4. Use full `process` for autonomous reports, benchmarks, scheduled/background work, or when a saved `final_synthesis.md` is desired.
 
 Additional rules:

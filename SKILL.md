@@ -1,7 +1,7 @@
 ---
 name: parallel-orchestrator
 description: "Use when a task contains multiple independent read-only research, analytics, data discovery, audit, review, or comparison subtasks that can be safely delegated in parallel; decompose, prepare worker prompts/artifacts, fan out, synthesize, and verify key evidence."
-version: 1.3.2
+version: 1.3.3
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -374,9 +374,9 @@ Mode selection policy:
 
 If the user did not name a mode, choose automatically for best practical efficiency:
 
-1. **Do not parallelize** when the task is small, sequential, sensitive, or side-effectful.
-2. **Use normal `delegate_task` / `smart`** for most ordinary broad read-only tasks. This has the lowest overhead and usually the best latency/cost balance when a single final answer in the active chat is enough.
-3. **Use `process --no-synthesis`** for long interactive research when the user wants maximum fan-out but the current/main agent should do the final merge in chat. This avoids the extra separate reducer process while preserving durable worker files.
+1. **Safety gate / abort parallelization** when a task was misclassified as parallel, or a broad task turns out to be sequential, sensitive, shared-state, or side-effectful. In that case, stop using this skill for execution and continue with the appropriate non-parallel workflow instead of forcing fan-out.
+2. **Use normal `delegate_task` / `smart`** for most broad read-only tasks that truly have independent branches. This has the lowest overhead and usually the best latency/cost balance when a single final answer in the active chat is enough.
+3. **Use `process --no-synthesis`** for long interactive research with independent branches when the user wants maximum fan-out but the current/main agent should do the final merge in chat. This avoids the extra separate reducer process while preserving durable worker files.
 4. **Use full `process`** for autonomous long runs, benchmarks, scheduled/background work, or when the user wants a saved `final_synthesis.md` report without relying on the current chat context.
 
 Additional rules:
@@ -678,11 +678,11 @@ Before final response:
 
 ## Zero-Config Behavior
 
-If the user simply gives a broad task and does not mention modes, choose the lowest-overhead safe route automatically:
+If the user simply gives a broad task and does not mention modes, choose the lowest-overhead safe parallel route automatically:
 
-1. Do not parallelize small, sequential, sensitive, or side-effectful tasks.
+1. If the task was misclassified and is not actually parallelizable, abort parallelization and continue with the appropriate non-parallel workflow. This is a safety gate, not a primary mode of the skill.
 2. Use normal `delegate_task` / `smart` for most broad read-only tasks that need one answer in the active chat.
-3. Use `process --no-synthesis` for long interactive research when durable worker outputs are useful but the current/main agent should do the final merge.
+3. Use `process --no-synthesis` for long interactive research with independent branches when durable worker outputs are useful but the current/main agent should do the final merge.
 4. Use full `process` for autonomous reports, benchmarks, scheduled/background work, or when a saved `final_synthesis.md` is desired.
 
 Do not ask the user to choose `smart`, `process`, or `--no-synthesis` unless the choice changes side effects, cost, persistence, or expected output format. Apply this skill as an optimization layer, not as extra user-facing complexity.
